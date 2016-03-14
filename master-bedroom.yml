@@ -1,0 +1,8 @@
+sonos:
+  ip: 10.0.10.160
+  port: 1401
+yamaha:
+  ip: 10.0.10.43
+  input: AUDIO1
+  volume: -10.0
+  soundprg: 'Straight'
