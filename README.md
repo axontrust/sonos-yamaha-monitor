@@ -1,7 +1,9 @@
 # sonos-yamaha-monitor
 
 *SONOS Yamaha Receiver Monitor* automatically turns on/off Yamaha Receiver(s) when SONOS Connect starts/stop playing.
-In addition, it will set the proper INPUT, VOLUME level and SOUNDPRG (sound program).
+In addition, it will set the proper INPUT, VOLUME level and SOUNDPRG (sound program).  The application is already fully-functional
+and will support more then one SONOS Connect and Yamaha amplifier/receivers.  That said, it is a work in progress and there are
+a few more non-critical things to do.
 
 ## Prerequisites
 
@@ -19,6 +21,7 @@ pip install pew soco rxv python-pushover
 pew new sonos-yamaha-monitor
 pip install -r requirements.txt
 sudo cp supervisord-conf.d/* /etc/supervisor/conf.d/.
+sudo mkdir /var/log/sonos-yamaha-monitor
 mkdir ~/.sonos-yamaha-monitor
 cp configs/*.yml ~/.sonos-yamaha-monitor
 sudo service supervisor restart
