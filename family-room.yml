@@ -1,12 +1,18 @@
 sonos:
   player_name: Family Room
-  uid: RINCON_B8E9379ABC8601400
+  uid: RINCON_XXXXXXXXXXXXXXXXX
   ip: 10.0.10.152
   event_port: 1400
 yamaha:
   friendly_name: Family Room
   model_name: HTR-4065
   ctrl_url: http://10.0.10.41:80/YamahaRemoteControl/ctrl
-  input: AUDIO1
+  input: AUDIO
   volume: -20.0
+  off_volume: -80.0
   soundprg: 'Straight'
+notifications:
+  pushover: 
+    enabled: True
+    user: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    app: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

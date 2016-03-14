@@ -15,3 +15,4 @@ soco==0.11.1
 urllib3==1.14
 xmltodict==0.10.1
 PyYAML==3.11
+python-pushover==0.2

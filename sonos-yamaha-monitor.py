@@ -4,12 +4,13 @@
 import time
 import soco
 import Queue
-import signal
+from signal import signal, SIGTERM
 import argparse
 import logging
 import rxv
 import yaml
 from urlparse import urlparse
+from pushover import Client as pushover
 
 __version__ = '1.0'
 
@@ -104,7 +105,7 @@ class SonosYamahaMonitor():
         return False
 
     def handle_sigterm(self, *args):
-        print u"SIGTERM caught. Exiting gracefully.".encode('utf-8')
+        self.log.info("SIGTERM caught. Exiting gracefully")
         self.break_loop = True
 
     def _subscription(self):
@@ -131,25 +132,45 @@ class SonosYamahaMonitor():
                               .format(self.cfg['sonos']['player_name'], e))
                 time.sleep(10)
 
+    def _yamaha_on(self):
+        self.log.info("{} Yamaha setting on".format(
+            self.cfg['yamaha']['friendly_name']))
+        self.yamaha.on = True
+        while not self.yamaha.on:
+            time.sleep(1)
+
+    def _yamaha_set_input(self):
+        self.log.info("{} Yamaha setting input to {}".format(
+            self.cfg['yamaha']['friendly_name'],
+            self.cfg['yamaha']['input']))
+        self.yamaha.input = self.cfg['yamaha']['input']
+
+    def _yamaha_set_volume(self):
+        self.log.info("{} Yamaha setting volume to {}".format(
+            self.cfg['yamaha']['friendly_name'],
+            self.cfg['yamaha']['volume']))
+        self.yamaha.volume = self.cfg['yamaha']['volume']
+
     def _started(self):
         if not self.yamaha.on:
-            self.log.info("{} Yamaha Turning on".format(
-                self.cfg['yamaha']['friendly_name']))
-            self.yamaha.on = True
-            while not self.yamaha.on:
-                time.sleep(1)
-
-        if self.yamaha.volume != self.cfg['yamaha']['volume']:
-            self.log.info("{} Yamaha setting volume to {}".format(
-                self.cfg['yamaha']['friendly_name'],
-                self.cfg['yamaha']['volume']))
-            self.yamaha.volume = self.cfg['yamaha']['volume']
-
-        if self.yamaha.input != self.cfg['yamaha']['input']:
-            self.log.info("{} Yamaha setting input to {}".format(
-                self.cfg['yamaha']['friendly_name'],
-                self.cfg['yamaha']['input']))
-            self.yamaha.input = self.cfg['yamaha']['input']
+            self._yamaha_on()
+            self._yamaha_set_input()
+            self._yamaha_set_volume()
+        else:
+            if self.yamaha.input != self.cfg['yamaha']['input']:
+                self.log.info("{} Yamaha ignoring, it's already on".format(
+                    self.cfg['yamaha']['friendly_name']))
+                if self.cfg['notifications']['pushover']['enabled']:
+                    notify = pushover(
+                        self.cfg['notifications']['pushover']['user'],
+                        api_token=self.cfg['notifications']['pushover']['app'])
+                    notify.send_message(
+                        "{} Yamaha ignoring SONOS because it is already on!"
+                        .format(self.cfg['yamaha']['friendly_name']),
+                        title="{} Yamaha".format(
+                            self.cfg['yamaha']['friendly_name']))
+            elif self.yamaha.volume != self.cfg['yamaha']['volume']:
+                self._yamaha_set_volume()
 
     def _stopped(self):
         if self.yamaha.on:
@@ -165,14 +186,14 @@ class SonosYamahaMonitor():
                 self.log.info("{} Yamaha, SONOS ignored".format(
                     self.cfg['yamaha']['friendly_name']))
 
-    def _status_check(self):
+    def _status(self):
         if not self.status:
             self.log.info("{} SONOS Invalid Status: {}".format(
                 self.cfg['sonos']['player_name'],
                 self.event.variables))
 
         if self.last_status != self.status:
-            self.log.info("{} SONOS Status: {}".format(
+            self.log.info("{} SONOS: {}".format(
                 self.cfg['sonos']['player_name'],
                 self.status))
 
@@ -198,15 +219,14 @@ class SonosYamahaMonitor():
             self.cfg['yamaha']['model_name'],
             self.yamaha.on, self.yamaha.input, self.yamaha.volume))
 
-        signal.signal(signal.SIGTERM, self.handle_sigterm)
+        signal(SIGTERM, self.handle_sigterm)
 
         while self.break_loop is False:
             self._subscription()
             try:
                 self.event = self.subscription.events.get(timeout=10)
                 self.status = self.event.variables.get('transport_state')
-
-                self._status_check()
+                self._status()
             except Queue.Empty:
                 pass
             except KeyboardInterrupt:
