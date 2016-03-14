@@ -16,6 +16,7 @@ __version__ = '1.0'
 logger = logging.getLogger(__name__)
 lfmt = '%(asctime)s %(levelname)s %(name)s %(funcName)s %(lineno)d %(message)s'
 lfmt = '%(asctime)s %(levelname)s %(funcName)s %(lineno)d %(message)s'
+lfmt = '%(asctime)s %(levelname)s %(message)s [%(funcName)s %(lineno)d]'
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO, format=lfmt)
@@ -71,13 +72,21 @@ class SonosYamahaMonitor():
         self.zone = zone
         self.state = None
         self.cfg = None
+        self.subscription = None
+        self.renewal_time = 120
         self.break_loop = False
+        self.last_status = None
+        self.sonos = None
+        self.yamaha = None
+        self.status = None
+        self.event = None
 
         self.find_cfg()
         if not self.state:
             self.log.error('error loading config.')
             return None
         self.log.info(self.cfg)
+        self.monitor()
 
     def find_cfg(self):
         cfg_fname = "/home/wylie/.sonos-yamaha-monitor/%s.yml" % (self.zone)
@@ -98,92 +107,106 @@ class SonosYamahaMonitor():
         print u"SIGTERM caught. Exiting gracefully.".encode('utf-8')
         self.break_loop = True
 
+    def _subscription(self):
+        if not self.subscription or not self.subscription.is_subscribed or \
+                self.subscription.time_left <= 5:
+            if self.subscription:
+                self.log.info("{} SONOS Unsubscribing from events"
+                              .format(self.cfg['sonos']['player_name']))
+                try:
+                    self.subscription.unsubscribe()
+                    soco.events.event_listener.stop()
+                except Exception as e:
+                    self.log.info(
+                        "{} SONOS Unsubscribe from events failed: {}"
+                        .format(self.cfg['sonos']['player_name'], e))
+
+            self.log.info("{} SONOS Subscribing to events"
+                          .format(self.cfg['sonos']['player_name']))
+            try:
+                self.subscription = self.sonos.avTransport.subscribe(
+                    requested_timeout=self.renewal_time, auto_renew=True)
+            except Exception as e:
+                self.log.info("{} SONOS Subscribe to events failed: {}"
+                              .format(self.cfg['sonos']['player_name'], e))
+                time.sleep(10)
+
+    def _started(self):
+        if not self.yamaha.on:
+            self.log.info("{} Yamaha Turning on".format(
+                self.cfg['yamaha']['friendly_name']))
+            self.yamaha.on = True
+            while not self.yamaha.on:
+                time.sleep(1)
+
+        if self.yamaha.volume != self.cfg['yamaha']['volume']:
+            self.log.info("{} Yamaha setting volume to {}".format(
+                self.cfg['yamaha']['friendly_name'],
+                self.cfg['yamaha']['volume']))
+            self.yamaha.volume = self.cfg['yamaha']['volume']
+
+        if self.yamaha.input != self.cfg['yamaha']['input']:
+            self.log.info("{} Yamaha setting input to {}".format(
+                self.cfg['yamaha']['friendly_name'],
+                self.cfg['yamaha']['input']))
+            self.yamaha.input = self.cfg['yamaha']['input']
+
+    def _stopped(self):
+        if self.yamaha.on:
+            if self.yamaha.input == self.cfg['yamaha']['input']:
+                self.log.info("{} Yamaha setting volume to {}".format(
+                    self.cfg['yamaha']['friendly_name'],
+                    self.cfg['yamaha']['off_volume']))
+                self.yamaha.volume = self.cfg['yamaha']['off_volume']
+                self.log.info("{} Yamaha turning off".format(
+                    self.cfg['yamaha']['friendly_name']))
+                self.yamaha.on = False
+            else:
+                self.log.info("{} Yamaha, SONOS ignored".format(
+                    self.cfg['yamaha']['friendly_name']))
+
+    def _status_check(self):
+        if not self.status:
+            self.log.info("{} SONOS Invalid Status: {}".format(
+                self.cfg['sonos']['player_name'],
+                self.event.variables))
+
+        if self.last_status != self.status:
+            self.log.info("{} SONOS Status: {}".format(
+                self.cfg['sonos']['player_name'],
+                self.status))
+
+        if self.last_status != 'PLAYING' and self.status == 'PLAYING':
+            self._started()
+
+        if self.last_status != 'PAUSED_PLAYBACK' and \
+                self.status == 'PAUSED_PLAYBACK' or \
+                self.last_status != "STOPPED" and self.status == 'STOPPED':
+            self._stopped()
+
+        self.last_status = self.status
+
     def monitor(self):
         soco.config.EVENT_LISTENER_PORT = self.cfg['sonos']['event_port']
-        connect = soco.SoCo(
+        self.sonos = soco.SoCo(
             self.cfg['sonos']['ip'])
-        yamaha = rxv.RXV(
+        self.yamaha = rxv.RXV(
             self.cfg['yamaha']['ctrl_url'], self.cfg['yamaha']['model_name'])
 
-        subscription = None
-        renewal_time = 120
-
-        print u"Yamaha Power status:  {}".format(yamaha.on)
-        print u"Yamaha Input select:  {}".format(yamaha.input)
-        print u"Yamaha Volume:        {}".format(yamaha.volume)
-        print
-
-        self.break_loop = False
-        last_status = None
+        self.log.info("{} ({}) Power={}, Input={}, Volume={}".format(
+            self.cfg['yamaha']['friendly_name'],
+            self.cfg['yamaha']['model_name'],
+            self.yamaha.on, self.yamaha.input, self.yamaha.volume))
 
         signal.signal(signal.SIGTERM, self.handle_sigterm)
 
         while self.break_loop is False:
-            if not subscription or not subscription.is_subscribed or \
-                    subscription.time_left <= 5:
-                if subscription:
-                    self.log.info("Unsubscribing from SONOS device events")
-                    try:
-                        subscription.unsubscribe()
-                        soco.events.event_listener.stop()
-                    except Exception as e:
-                        self.log.info("Unsubscribe from SONOS failed")
-
-                self.log.info("Subscribing to SONOS device events")
-                try:
-                    subscription = connect.avTransport.subscribe(
-                        requested_timeout=renewal_time, auto_renew=True)
-                except Exception as e:
-                    self.log.info("Subscribe failed: {}".format(e))
-                    time.sleep(10)
-                    continue
-
+            self._subscription()
             try:
-                event = subscription.events.get(timeout=10)
-                status = event.variables.get('transport_state')
+                self.event = self.subscription.events.get(timeout=10)
+                self.status = self.event.variables.get('transport_state')
 
-                if not status:
-                    self.log.info("Invalid SONOS status: {}"
-                                  .format(event.variables))
-
-                if last_status != status:
-                    self.log.info("SONOS play status: {}".format(status))
-
-                if last_status != 'PLAYING' and status == 'PLAYING':
-                    if not yamaha.on:
-                        self.log.info("Yamaha turning on")
-                        yamaha.on = True
-                        while not yamaha.on:
-                            time.sleep(1)
-                    if yamaha.volume != yamaha_volume:
-                        self.log.info("Yamaha setting volume to {}"
-                                      .format(yamaha_volume))
-                        yamaha.volume = yamaha_volume
-                    if yamaha.input != yamaha_input:
-                        self.log.info("Yamaha setting input to {}"
-                                      .format(yamaha_input))
-                        yamaha.input = yamaha_input
-
-                if last_status != 'PAUSED_PLAYBACK' and \
-                        status == 'PAUSED_PLAYBACK':
-                    if yamaha.on:
-                        if yamaha.input == yamaha_input:
-                            self.log.info("Yamaha turning off")
-                            yamaha.on = False
-                        else:
-                            self.log.info(
-                                "Ignoring Yamaha, SONOS doesn't have input")
-                if last_status != 'STOPPED' and \
-                        status == 'STOPPED':
-                    if yamaha.on:
-                        if yamaha.input == yamaha_input:
-                            self.log.info("Yamaha turning off")
-                            yamaha.on = False
-                        else:
-                            self.log.info(
-                                "Ignoring Yamaha, SONOS doesn't have input")
-
-                last_status = status
+                self._status_check()
             except Queue.Empty:
                 pass
             except KeyboardInterrupt:
@@ -191,7 +214,7 @@ class SonosYamahaMonitor():
                 break
 
         if self.break_loop:
-            subscription.unsubscribe()
+            self.subscription.unsubscribe()
             soco.events.event_listener.stop()
 
 
