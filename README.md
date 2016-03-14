@@ -1,9 +1,11 @@
 # sonos-yamaha-monitor
 
-*SONOS Yamaha Receiver Monitor* automatically turns on/off Yamaha Receiver(s) when SONOS Connect starts/stop playing.
-In addition, it will set the proper INPUT, VOLUME level and SOUNDPRG (sound program).  The application is already fully-functional
-and will support more then one SONOS Connect and Yamaha amplifier/receivers.  That said, it is a work in progress and there are
-a few more non-critical things to do.
+*SONOS Connect & Yamaha Receiver Monitor* automatically turns on/off Yamaha Receiver(s) when SONOS Connect starts/stop playing.
+
+It will set the proper INPUT, VOLUME level and SOUNDPRG (sound program).  The application is fully-functional
+and, through configuration, will support one mor more SONOS Connect and Yamaha receiver relationships.  It also provides volume safeguarding for when the receiver is used with other variable output devices (so you don't blow speakers when switching to a different INPUT), as well as the ability to not "take over" an input that is already in use (for example, with a Television or DVR INPUT).
+
+That said, it is a work in progress and there area few more non-critical things to do.
 
 ## Prerequisites
 
