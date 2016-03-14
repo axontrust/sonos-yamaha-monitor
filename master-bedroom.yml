@@ -1,8 +1,12 @@
 sonos:
+  player_name: Master Bedroom
+  uid: RINCON_B8E93799C18401400
   ip: 10.0.10.160
-  port: 1401
+  event_port: 1401
 yamaha:
-  ip: 10.0.10.43
+  friendly_name: Master Bedroom
+  model_name: RX-V675
+  ctrl_url: http://10.0.10.43:80/YamahaRemoteControl/ctrl
   input: AUDIO1
   volume: -10.0
   soundprg: 'Straight'
