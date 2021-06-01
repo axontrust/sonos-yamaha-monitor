@@ -12,7 +12,7 @@ requests==2.9.1
 rxv==0.1.9
 six==1.10.0
 soco==0.11.1
-urllib3==1.14
+urllib3==1.26.5
 xmltodict==0.10.1
 PyYAML==3.11
 python-pushover==0.2
